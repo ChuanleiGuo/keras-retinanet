@@ -76,32 +76,49 @@ class Anchors(keras.layers.Layer):
 
 
 class NonMaximumSuppression(keras.layers.Layer):
-    def __init__(self, nms_threshold=0.5, top_k=None, max_boxes=300, *args, **kwargs):
-        self.nms_threshold = nms_threshold
-        self.top_k         = top_k
-        self.max_boxes     = max_boxes
+    def __init__(self, num_classes, nms_threshold=0.5, score_threshold=0.05, max_boxes=300, *args, **kwargs):
+        self.num_classes     = num_classes
+        self.nms_threshold   = nms_threshold
+        self.score_threshold = score_threshold
+        self.max_boxes       = max_boxes
         super(NonMaximumSuppression, self).__init__(*args, **kwargs)
 
     def call(self, inputs, **kwargs):
         boxes, classification, detections = inputs
 
         # TODO: support batch size > 1.
-        boxes          = boxes[0]
-        classification = classification[0]
-        detections     = detections[0]
+        boxes           = boxes[0]
+        classification  = classification[0]
+        detections      = detections[0]
+        indices         = backend.range(keras.backend.shape(classification)[0])
+        selected_scores = []
 
-        scores = keras.backend.max(classification, axis=1)
+        for c in range(self.num_classes):
+            scores = classification[:, c]
 
-        # selecting best anchors theoretically improves speed at the cost of minor performance
-        if self.top_k:
-            scores, indices = backend.top_k(scores, self.top_k, sorted=False)
-            boxes           = keras.backend.gather(boxes, indices)
-            classification  = keras.backend.gather(classification, indices)
-            detections      = keras.backend.gather(detections, indices)
+            # threshold based on score
+            score_indices = backend.where(keras.backend.greater(scores, self.score_threshold))
+            score_indices = keras.backend.cast(score_indices, 'int32')
+            boxes_        = backend.gather_nd(boxes, score_indices)
+            scores        = keras.backend.gather(scores, score_indices)[:, 0]
 
-        indices = backend.non_max_suppression(boxes, scores, max_output_size=self.max_boxes, iou_threshold=self.nms_threshold)
+            # perform NMS
+            nms_indices = backend.non_max_suppression(boxes_, scores, max_output_size=self.max_boxes, iou_threshold=self.nms_threshold)
 
-        detections = keras.backend.gather(detections, indices)
+            # filter set of original indices
+            selected_indices = keras.backend.gather(score_indices, nms_indices)
+
+            # mask original classification column, setting all suppressed values to 0
+            scores = keras.backend.gather(scores, nms_indices)
+            scores = backend.scatter_nd(selected_indices, scores, keras.backend.shape(classification[:, c]))
+            scores = keras.backend.expand_dims(scores, axis=1)
+
+            selected_scores.append(scores)
+
+        classification = keras.backend.concatenate(selected_scores, axis=1)
+
+        #detections = keras.backend.gather(detections, indices)
+        detections = keras.backend.concatenate([boxes, classification], axis=1)
         return keras.backend.expand_dims(detections, axis=0)
 
     def compute_output_shape(self, input_shape):
@@ -110,9 +127,10 @@ class NonMaximumSuppression(keras.layers.Layer):
     def get_config(self):
         config = super(NonMaximumSuppression, self).get_config()
         config.update({
-            'nms_threshold' : self.nms_threshold,
-            'top_k'         : self.top_k,
-            'max_boxes'     : self.max_boxes,
+            'num_classes'     : self.num_classes,
+            'nms_threshold'   : self.nms_threshold,
+            'score_threshold' : self.score_threshold,
+            'max_boxes'       : self.max_boxes,
         })
 
         return config
