@@ -37,6 +37,7 @@ from .. import layers
 from ..callbacks import RedirectModel
 from ..callbacks.eval import Evaluate
 from ..preprocessing.pascal_voc import PascalVocGenerator
+from ..preprocessing.kitti_car import KITTICarGenerator
 from ..preprocessing.csv_generator import CSVGenerator
 from ..preprocessing.open_images import OpenImagesGenerator
 from ..utils.transform import random_transform_generator
@@ -180,6 +181,19 @@ def create_generators(args):
             'test',
             batch_size=args.batch_size
         )
+    elif args.dataset_type == "kitti_car":
+        train_generator = KITTICarGenerator(
+            args.kitti_path,
+            "training",
+            train_generator=transform_generator,
+            batch_size=args.batch_size
+        )
+
+        train_generator = KITTICarGenerator(
+            args.kitti_path,
+            "training",
+            batch_size=args.batch_size
+        )
     elif args.dataset_type == 'csv':
         train_generator = CSVGenerator(
             args.annotations,
@@ -272,6 +286,9 @@ def parse_args(args):
     pascal_parser = subparsers.add_parser('pascal')
     pascal_parser.add_argument('pascal_path', help='Path to dataset directory (ie. /tmp/VOCdevkit).')
 
+    kitti_parser = subparsers.add_parser("kitti_car")
+    kitti_parser.add_argument("kitti_path", help="Path to dataset directory (ie. /tmp/KITTI).")
+
     def csv_list(string):
         return string.split(',')
 
@@ -293,6 +310,7 @@ def parse_args(args):
     group.add_argument('--weights',           help='Initialize the model with weights from a file.')
     group.add_argument('--no-weights',        help='Don\'t initialize the model with any weights.', dest='imagenet_weights', action='store_const', const=False)
 
+    parser.add_argument('--iou_threshold',   help="iou threshold for evaluating model", default=0.5, type=float)
     parser.add_argument('--backbone',        help='Backbone model used by retinanet.', default='resnet50', type=str)
     parser.add_argument('--batch-size',      help='Size of the batches.', default=1, type=int)
     parser.add_argument('--gpu',             help='Id of the GPU to use (as reported by nvidia-smi).')
