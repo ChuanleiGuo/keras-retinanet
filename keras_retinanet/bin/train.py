@@ -189,7 +189,7 @@ def create_generators(args):
             batch_size=args.batch_size
         )
 
-        train_generator = KITTICarGenerator(
+        validation_generator = KITTICarGenerator(
             args.kitti_path,
             "training",
             batch_size=args.batch_size
