@@ -31,6 +31,7 @@ if __name__ == "__main__" and __package__ is None:
 
 # Change these to absolute imports if you copy this script outside the keras_retinanet package.
 from ..preprocessing.pascal_voc import PascalVocGenerator
+from ..preprocessing.kitti_car import KITTICarGenerator
 from ..preprocessing.csv_generator import CSVGenerator
 from ..utils.keras_version import check_keras_version
 from ..utils.eval import evaluate
@@ -57,6 +58,11 @@ def create_generator(args):
             args.pascal_path,
             'test',
         )
+    elif args.dataset_type == "kitti_car":
+        validation_generator = KITTICarGenerator(
+            args.kitti_path,
+            "testing"
+        )
     elif args.dataset_type == 'csv':
         validation_generator = CSVGenerator(
             args.annotations,
@@ -78,6 +84,9 @@ def parse_args(args):
 
     pascal_parser = subparsers.add_parser('pascal')
     pascal_parser.add_argument('pascal_path', help='Path to dataset directory (ie. /tmp/VOCdevkit).')
+
+    kitti_parser = subparsers.add_parser("kitti_car")
+    kitti_parser.add_argument("kitti_path", help="Path to dataset directory (ie. /tmp/KITTI).")
 
     csv_parser = subparsers.add_parser('csv')
     csv_parser.add_argument('annotations', help='Path to CSV file containing annotations for evaluation.')

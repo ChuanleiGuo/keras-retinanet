@@ -30,6 +30,7 @@ if __name__ == "__main__" and __package__ is None:
 
 # Change these to absolute imports if you copy this script outside the keras_retinanet package.
 from ..preprocessing.pascal_voc import PascalVocGenerator
+from ..preprocessing.kitti_car import KITTICarGenerator
 from ..preprocessing.csv_generator import CSVGenerator
 from ..preprocessing.open_images import OpenImagesGenerator
 from ..utils.transform import random_transform_generator
@@ -66,6 +67,12 @@ def create_generator(args):
             args.pascal_set,
             transform_generator=transform_generator
         )
+    elif args.dataset_type == "kitti_car":
+        generator = KITTICarGenerator(
+            args.kitti_path,
+            args.kitti_set,
+            transform_generator=transform_generator
+        )
     elif args.dataset_type == 'csv':
         generator = CSVGenerator(
             args.annotations,
@@ -100,6 +107,10 @@ def parse_args(args):
     pascal_parser = subparsers.add_parser('pascal')
     pascal_parser.add_argument('pascal_path', help='Path to dataset directory (ie. /tmp/VOCdevkit).')
     pascal_parser.add_argument('--pascal-set',  help='Name of the set to show (defaults to test).', default='test')
+
+    kitti_parser = subparsers.add_parser("kitti_car")
+    kitti_parser.add_argument("kitti_path", help="Path to dataset directory (ie. /tmp/KITTI).")
+    kitti_parser.add_argument("--kitti-set", help="Name of the set to show (defaults to testing)", default="testing")
 
     def csv_list(string):
         return string.split(',')
