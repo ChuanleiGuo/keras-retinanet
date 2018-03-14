@@ -102,7 +102,8 @@ def create_callbacks(model, training_model, prediction_model, validation_generat
                 args.snapshot_path,
                 '{backbone}_{dataset_type}_{{epoch:02d}}.h5'.format(backbone=args.backbone, dataset_type=args.dataset_type)
             ),
-            verbose=1
+            verbose=1,
+            save_best_only=True
         )
         checkpoint = RedirectModel(checkpoint, prediction_model)
         callbacks.append(checkpoint)
