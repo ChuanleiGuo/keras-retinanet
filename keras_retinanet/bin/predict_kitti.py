@@ -20,7 +20,7 @@ from ..preprocessing.kitti_car import KITTICarGenerator
 from ..utils.keras_version import check_keras_version
 from ..utils.eval import evaluate, _get_detections
 from ..utils.image import read_image_bgr, resize_image, preprocess_image
-from ..utils.visualization import draw_detections
+from ..utils.visualization import draw_boxes, draw_caption
 from ..models.resnet import custom_objects
 
 
@@ -48,6 +48,24 @@ label_to_name = {
     0: "Car"
 }
 
+def draw_detections(image, detections, color=(255, 0, 0), label_to_name=None):
+    """ Draws detections in an image.
+
+    # Arguments
+        image      : The image to draw on.
+        detections : A [N, 4 + num_classes] matrix (x1, y1, x2, y2, cls_1, cls_2, ...).
+        color      : The color of the boxes.
+        generator  : (optional) Generator which can map label to class name.
+    """
+    draw_boxes(image, detections, color=color)
+
+    # draw labels
+    for d in detections:
+        label   = np.argmax(d[4:])
+        score   = d[4 + label]
+        caption = (label_to_name(label) if label_to_name else label) + ': {0:.2f}'.format(score)
+        draw_caption(image, d, caption)
+
 def main(args=None):
     # parse arguments
     if args is None:
@@ -74,7 +92,7 @@ def main(args=None):
     model = keras.models.load_model(args.model, custom_objects=custom_objects)
 
     # print model summary
-    print(model.summary())
+    # print(model.summary())
 
     if args.data_path is None or not os.path.exists(args.data_path):
         print("can not find data_path")
@@ -91,11 +109,9 @@ def main(args=None):
         image = preprocess_image(raw_image.copy())
         # resize
         image, scale = resize_image(image, min_side=768, max_side=2560)
-        # added batch dim
-        image = np.expand_dims(image, axis=0)
 
         # predict
-        _, _, detections = model.predict_on_batch(image)
+        _, _, detections = model.predict_on_batch(np.expand_dims(image, axis=0))
 
         # clip to image shape
         detections[:, :, 0] = np.maximum(0, detections[:, :, 0])
