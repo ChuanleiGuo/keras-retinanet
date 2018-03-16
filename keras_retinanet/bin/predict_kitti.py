@@ -7,6 +7,7 @@ import keras
 import tensorflow as tf
 
 import cv2
+from tqdm import tqdm
 
 # Allow relative imports when being executed as script.
 if __name__ == "__main__" and __package__ is None:
@@ -79,11 +80,11 @@ def main(args=None):
     paths = [os.path.join(args.data_path, f) for f in paths]
     num_files = len(paths)
 
-    for path in paths:
+    for path in tqdm(paths):
         # bgr channel order
         raw_image = read_image_bgr(path)
         # preprocess
-        image = preprocess_image(raw_image.copy)
+        image = preprocess_image(raw_image.copy())
         # resize
         image, scale = resize_image(image, min_side=768, max_side=2560)
         # added batch dim
