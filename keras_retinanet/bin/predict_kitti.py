@@ -28,7 +28,7 @@ def create_generator(args):
     if args.dataset_type == "kitti_car":
         generator = KITTICarGenerator(
             args.kitti_path,
-            "training",
+            "validation",
             shuffle_groups=False
         )
     else:
