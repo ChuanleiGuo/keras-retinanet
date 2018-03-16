@@ -44,6 +44,10 @@ def parse_args(args):
     return parser.parse_args(args)
 
 
+label_to_name = {
+    0: "Car"
+}
+
 def main(args=None):
     # parse arguments
     if args is None:
@@ -127,7 +131,7 @@ def main(args=None):
         res_file = os.path.join(args.dets_path, "{}.txt".format(os.path.basename(path).split('.')[0]))
         with open(res_file, "w+") as f:
             for idx in range(image_detections.shape[0]):
-                label = KITTICarGenerator.label_to_name(image_predicted_labels[idx])
+                label = label_to_name[image_predicted_labels[idx]]
                 xmin, ymin, xmax, ymax, score = image_detections[idx, :]
                 f.write("%s -1 -1 -10 %.3f %.3f %.3f %.3f -1 -1 -1 -1000 -1000 -1000 -10 %.8f\n" %
                     (label, xmin, ymin, xmax, ymax, score))
