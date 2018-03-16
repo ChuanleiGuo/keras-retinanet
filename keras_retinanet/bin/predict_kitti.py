@@ -50,7 +50,7 @@ def parse_args(args):
     parser.add_argument('--score-threshold', help='Threshold on score to filter detections with (defaults to 0.05).', default=0.05, type=float)
     parser.add_argument('--max-detections',  help='Max Detections per image (defaults to 100).', default=100, type=int)
     parser.add_argument('--save-path',       help='Path for saving images with detections.')
-    parser.add_argument('--dets-path',       help='Path for saving dets', required=True)
+    parser.add_argument('--dets-path',       help='Path for saving dets')
 
     return parser.parse_args(args)
 
