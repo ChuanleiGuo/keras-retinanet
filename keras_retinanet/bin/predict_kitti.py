@@ -2,8 +2,11 @@ import argparse
 import os
 import sys
 
+import numpy as np
 import keras
 import tensorflow as tf
+
+import cv2
 
 # Allow relative imports when being executed as script.
 if __name__ == "__main__" and __package__ is None:
@@ -15,6 +18,8 @@ if __name__ == "__main__" and __package__ is None:
 from ..preprocessing.kitti_car import KITTICarGenerator
 from ..utils.keras_version import check_keras_version
 from ..utils.eval import evaluate, _get_detections
+from ..utils.image import read_image_bgr, resize_image, preprocess_image
+from ..utils.visualization import draw_detections
 from ..models.resnet import custom_objects
 
 
@@ -24,33 +29,16 @@ def get_session():
     return tf.Session(config=config)
 
 
-def create_generator(args):
-    if args.dataset_type == "kitti_car":
-        generator = KITTICarGenerator(
-            args.kitti_path,
-            "validation",
-            shuffle_groups=False
-        )
-    else:
-        raise ValueError('Invalid data type received: {}'.format(args.dataset_type))
-
-    return generator
-
-
 def parse_args(args):
-    parser     = argparse.ArgumentParser(description='Evaluation script for a RetinaNet network.')
-    subparsers = parser.add_subparsers(help='Arguments for specific dataset types.', dest='dataset_type')
-    subparsers.required = True
+    parser     = argparse.ArgumentParser(description='Predict script for a RetinaNet network.')
 
-    kitti_parser = subparsers.add_parser("kitti_car")
-    kitti_parser.add_argument("kitti_path", help="Path to dataset directory (ie. /tmp/KITTI).")
-
-    parser.add_argument('--model',             help='Path to RetinaNet model.')
+    parser.add_argument('--model',           help='Path to RetinaNet model.')
+    parser.add_argument('--data-path',       help="path of kitti images", dest="data_path")
     parser.add_argument('--gpu',             help='Id of the GPU to use (as reported by nvidia-smi).')
     parser.add_argument('--score-threshold', help='Threshold on score to filter detections with (defaults to 0.05).', default=0.05, type=float)
     parser.add_argument('--max-detections',  help='Max Detections per image (defaults to 100).', default=100, type=int)
-    parser.add_argument('--save-path',       help='Path for saving images with detections.')
-    parser.add_argument('--dets-path',       help='Path for saving dets')
+    parser.add_argument('--save-path',       help='Path for saving images with detections.', dest="save_path")
+    parser.add_argument('--dets-path',       help='Path for saving dets', dest="dets_path")
 
     return parser.parse_args(args)
 
@@ -73,8 +61,8 @@ def main(args=None):
     if args.save_path is not None and not os.path.exists(args.save_path):
         os.makedirs(args.save_path)
 
-    # create the generator
-    generator = create_generator(args)
+    if args.dets_path is not None and not os.path.exists(args.dets_path):
+        os.makedirs(args.dets_path)
 
     # load the model
     print('Loading model, this may take a second...')
@@ -83,27 +71,65 @@ def main(args=None):
     # print model summary
     print(model.summary())
 
-    # start predict
-    detections = _get_detections(
-        generator,
-        model,
-        score_threshold=args.score_threshold,
-        max_detections=args.max_detections,
-        save_path=args.save_path
-    )
+    if args.data_path is None or not os.path.exists(args.data_path):
+        print("can not find data_path")
+        return
 
-    import pdb; pdb.set_trace()
-    for idx in range(detections.shape[0]):
-        for cls_idx in range(detections[idx].shape[0]):
-            dets = detections[idx, cls_idx, :, :]
-            for box_id in range(dets.shape[0]):
-                xmin, ymin, xmax, ymax, score = dets[box_id]
-                with open(os.path.join(args.dets_path, "%06d.txt" % (idx)), "a+") as f:
-                    f.write("%s -1 -1 -10 %.3f %.3f %.3f %.3f -1 -1 -1 -1000 -1000 -1000 -10 %.8f\n" % \
-                        (generator.label_to_name(cls_idx),xmin,ymin,xmax,ymax,score))
+    paths = os.listdir(args.data_path)
+    paths = [os.path.join(args.data_path, f) for f in paths]
+    num_files = len(paths)
 
-    print(detections)
+    for path in paths:
+        # bgr channel order
+        raw_image = read_image_bgr(path)
+        # preprocess
+        image = preprocess_image(raw_image.copy)
+        # resize
+        image, scale = resize_image(image, min_side=768, max_side=2560)
+        # added batch dim
+        image = np.expand_dims(image, axis=0)
 
+        # predict
+        _, _, detections = model.predict_on_batch(image)
+
+        # clip to image shape
+        detections[:, :, 0] = np.maximum(0, detections[:, :, 0])
+        detections[:, :, 1] = np.maximum(0, detections[:, :, 1])
+        detections[:, :, 2] = np.minimum(image.shape[1], detections[:, :, 2])
+        detections[:, :, 3] = np.minimum(image.shape[0], detections[:, :, 3])
+
+        # correct boxes for image scale
+        detections[0, :, :4] /= scale
+
+        # select scores from detections
+        scores = detections[0, :, 4:]
+
+        # select indices which have a score above the threshold
+        indices = np.where(detections[0, :, 4:] > args.score_threshold)
+
+        # select those scores
+        scores = scores[indices]
+
+        # find the order with which to sort the scores
+        scores_sort = np.argsort(-scores)[:args.max_detections]
+
+        # select detections
+        image_boxes      = detections[0, indices[0][scores_sort], :4]
+        image_scores     = np.expand_dims(detections[0, indices[0][scores_sort], 4 + indices[1][scores_sort]], axis=1)
+        image_detections = np.append(image_boxes, image_scores, axis=1)
+        image_predicted_labels = indices[1][scores_sort]
+
+        if args.save_path is not None:
+            draw_detections(raw_image, detections[0, indices[0][scores_sort], :])
+            cv2.imwrite(os.path.join(args.save_path, '{}.png'.format(os.path.basename(path))), raw_image)
+
+        res_file = os.path.join(args.dets_path, "{}.txt".format(os.path.basename(path).split('.')[0]))
+        with open(res_file, "w+") as f:
+            for idx in range(image_detections.shape[0]):
+                label = KITTICarGenerator.label_to_name(image_predicted_labels[idx])
+                xmin, ymin, xmax, ymax, score = image_detections[idx, :]
+                f.write("%s -1 -1 -10 %.3f %.3f %.3f %.3f -1 -1 -1 -1000 -1000 -1000 -10 %.8f\n" %
+                    (label, xmin, ymin, xmax, ymax, score))
 
 if __name__ == '__main__':
     main()
